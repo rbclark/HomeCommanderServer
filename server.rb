@@ -1,51 +1,102 @@
 require 'socket'
 require 'pry'
 require 'time_difference'
+require 'serialport'
 
 class Clients
-  def initialize
+  def initialize(server, device)
     @clients = []
+    @server = server
     @lastUpdateTime = Time.now
     @state = Array.new(10, 0)
+    @serialPort = SerialPort.new(device, 9600, 8, 1, SerialPort::NONE)
+  end
+
+  def addNewClients
+    begin
+      @clients << @server.accept_nonblock
+      puts "Added client, total connections #{@clients.size}"
+    rescue IO::WaitReadable, Errno::EINTR
+    end
   end
 
   def recvAll
     @clients.each do |client|
+      message = nil
       begin
-        puts client.read_nonblock(10).delete("\0")
+        message = safelyRun(client) { |c| c.read_nonblock(10).delete("\0") }
       rescue IO::WaitReadable, Errno::EINTR
       end
+      /\@PDS(?<deviceID>\d+)\?(?<state>\d+)\?/ =~ message
+      unless (deviceID.nil? || deviceID.empty?)
+        puts "Message received #{deviceID} #{state}"
+        sendSerialMessage(deviceID, state)
+        updateHDP
+      end
     end
+  end
+
+  def sendSerialMessage(deviceID, state)
+    @serialPort.write "@HAL#{state}?"
+    @state[deviceID.to_i - 1] = state.to_i
   end
 
   def updateHDP
     @clients.each do |client|
-      client.puts "@HDP#{@state.join('')}?%"
+      safelyRun(client) { |c| c.write "@HDP#{@state.join('')}?%" }
+    end
+    @lastUpdateTime = Time.now
+  end
+
+  def safelyRun(client)
+    begin
+      yield(client)
+    rescue Errno::ECONNRESET, EOFError, Errno::EPIPE
+      client.close
+      @clients.delete(client)
+      puts "Deleted client, total connections #{@clients.size}"
     end
   end
 
-  def messageAll
+  def keepAliveAll
     if TimeDifference.between(Time.now, @lastUpdateTime).in_seconds > 4
-      @clients.each do |client|
-        client.puts '@HAD0?10158?1?81.91?1012.66?79.50?0?%'
-      end
-      @lastUpdateTime = Time.now
+      updateHDP
     end
   end
 
-  def <<(client)
-    @clients << client
+  def shutDown
+    puts "Closing all clients and cleanly shutting down"
+    @clients.each do |client|
+      safelyRun(client) { |c| c.close }
+    end
+    puts "Done!"
   end
 end
 
-server = TCPServer.new('0.0.0.0', 80)
-clients = Clients.new
-loop do
-  begin
-    clients << server.accept_nonblock
-  rescue IO::WaitReadable, Errno::EINTR
-  end
+if ARGV[0].nil?
+  puts "Usage: ./server.rb <TTYDevice> <optional server port>"
+  exit
+end
 
-  clients.messageAll
+usbDevice = ARGV[0]
+port = ARGV[1] || 80
+server = TCPServer.new('0.0.0.0', port)
+clients = Clients.new(server, usbDevice)
+
+Signal.trap("INT") {
+  clients.shutDown
+  exit
+}
+
+# Trap `Kill `
+Signal.trap("TERM") {
+  clients.shutDown
+  exit
+}
+
+puts "Listening for connections on port #{port}..."
+loop do
+  clients.addNewClients
+  clients.keepAliveAll
   clients.recvAll
 end

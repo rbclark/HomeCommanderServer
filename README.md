@@ -5,6 +5,6 @@ This server is able to communicate with the [FMGames Home Commander](https://pla
 ## Usage
 
     bundle install
-    sudo -E bundle exec ruby server.rb
+    bundle exec ruby server.rb <TTYDevice> <optional server port>
 
-sudo is required since it binds to port 80. This is a limitation of the Home Commander application.
+The server will then startup on port 80 by default. If you wish to run on a different port you can pass it as the first argument the the program as shown above.
