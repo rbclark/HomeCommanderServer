@@ -9,7 +9,7 @@ class Clients
     @server = server
     @lastUpdateTime = Time.now
     @state = Array.new(10, 0)
-    @serialPort = SerialPort.new(device, 9600, 8, 1, SerialPort::NONE)
+    @serialPort = SerialPort.new(device, 115200, 8, 1, SerialPort::NONE)
   end
 
   def addNewClients
