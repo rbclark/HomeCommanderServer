@@ -148,10 +148,13 @@ class Halloween
     @home_commander = home_commander
 
     @vlc_devices = {
-      hologram: ['192.168.1.157', 6100, 'C:\halloween\ghost.mp4'], # Picture frame on white sheet hologram
-      lightbulbSpeaker: ['192.168.1.157', 6100], # Speaker above where lightbulb is hanging
-      spookySpeaker: ['192.168.1.157', 6100], # Speaker behind spooky
-      skeletonHandSpeaker: ['192.168.1.157', 6100], # Speaker by skeleton hand
+      hologram: ['192.168.1.12', 6100, 'C:\halloween\ghost.mp4'], # Picture frame on white sheet hologram
+
+      lightbulbSpeaker: ['192.168.1.155', 6100], # Speaker above where lightbulb is hanging
+      spookySpeaker: ['192.168.1.155', 6101], # Speaker behind spooky
+      skeletonHandSpeaker: ['192.168.1.155', 6102], # Speaker by skeleton hand
+      trashCanSpeaker: ['192.168.1.155', 6103], # Speaker set outside behind trash can
+
       pictureFrame: ['192.168.1.157', 6100, 'C:\halloween\picture.mp4'] # Speaker by picture frame
     }
   end
