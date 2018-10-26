@@ -3,6 +3,7 @@ require 'pry'
 require 'time_difference'
 require 'serialport'
 require 'net/http'
+require 'open3'
 
 class HomeCommander
   def initialize(server, device)
@@ -23,7 +24,7 @@ class HomeCommander
     # Halloween specific, there are 3 zones, we need to make sure that when
     # zones are triggered they only trigger once and are then locked
     @zone_states = Array.new(3, 0)
-    @zone_trigger = Halloween.new(self)
+    @halloween = Halloween.new(self)
   end
 
   def addNewClients
@@ -71,7 +72,7 @@ class HomeCommander
       if @zone_states[zone.to_i - 1].eql? 0
         @zone_states[zone.to_i - 1] = 1
         # Call zone1, zone2, or zone3 methods in a new thread
-        Thread.new { @zone_trigger.public_send("zone#{zone}") }
+        Thread.new { @halloween.public_send("zone#{zone}") }
       end
     end
   end
@@ -84,11 +85,16 @@ class HomeCommander
     if state.eql? 1
       case deviceID
       when 1 # spooky head audio
-        @zone_trigger.triggerVLCDevice('spookySpeaker', 'C:\path\to\file.mp4')
-        updateDeviceState(deviceID, 0)
+        Thread.new {
+          @halloween.playAudio('olvDeep', 'plughw:CARD=Device_1,DEV=0')
+          updateDeviceState(deviceID, 0)
+        }
       when 9
-        @zone_trigger.triggerVLCDevice('pictureFrame')
-        updateDeviceState(deviceID, 0)
+        Thread.new {
+          @halloween.playVideo
+          updateDeviceState(deviceID, 0)
+        }
+
       end
     end
   end
@@ -135,6 +141,7 @@ class HomeCommander
     @clients.each do |client|
       safelyRun(client) { |c| c.close }
     end
+    @halloween.cleanup
     puts "Done!"
   end
 end
@@ -147,16 +154,15 @@ class Halloween
   def initialize(home_commander)
     @home_commander = home_commander
 
-    @vlc_devices = {
-      hologram: ['192.168.1.12', 6100, 'C:\halloween\ghost.mp4'], # Picture frame on white sheet hologram
-
-      lightbulbSpeaker: ['192.168.1.155', 6100], # Speaker above where lightbulb is hanging
-      spookySpeaker: ['192.168.1.155', 6101], # Speaker behind spooky
-      skeletonHandSpeaker: ['192.168.1.155', 6102], # Speaker by skeleton hand
-      trashCanSpeaker: ['192.168.1.155', 6103], # Speaker set outside behind trash can
-
-      pictureFrame: ['192.168.1.157', 6100, 'C:\halloween\picture.mp4'] # Speaker by picture frame
+    @audio = {
+      olvDeep: '/home/pi/Halloween_2018/Sound_Effects/l_olvDeep.wav', # Example audio effect
     }
+
+    @bgVideo, _, _ = Open3.popen3("/usr/bin/omxplayer /home/pi/Halloween_2018/picture-frame-effects/looped_still_debutante.mp4 --loop --no-osd --layer 0")
+  end
+
+  def cleanup
+    @bgVideo.write 'q'
   end
 
   def zone1
@@ -181,24 +187,13 @@ class Halloween
     @home_commander.updateZoneState(3, 0)
   end
 
-  def triggerVLCDevice(deviceName, filename=nil)
-    currentDevice = @vlc_devices[deviceName.to_sym]
-    if filename.nil?
-      runVLC(currentDevice[0], currentDevice[1], currentDevice[2])
-    else
-      runVLC(currentDevice[0], currentDevice[1], filename)
-    end
+  def playAudio(effect, deviceName)
+    filename = @audio[effect.to_sym]
+    `/usr/bin/aplay -D #{deviceName} '#{filename}'`
   end
 
-  def runVLC(ip, port, filename)
-    uri = URI("http://#{ip}:#{port}/requests/status.xml?command=in_play&input=#{filename}")
-
-    Net::HTTP.start(ip, port) do |http|
-      request = Net::HTTP::Get.new uri.request_uri
-      request.basic_auth '', 'meatball'
-
-      http.request request # Net::HTTPResponse object
-    end
+  def playVideo
+    `/usr/bin/omxplayer /home/pi/Halloween_2018/picture-frame-effects/debutante.mp4 --no-osd -o local --layer 1`
   end
 end
 
